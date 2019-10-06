@@ -5,7 +5,7 @@ INCLUDE += -Iinclude
 SRCDIR = src
 OBJDIR = obj
 SRC = $(wildcard $(SRCDIR)/*.c)
-PLSH_OBJ = $(OBJDIR)/plsh.o $(OBJDIR)/errors.o $(OBJDIR)/context.o
+PLSH_OBJ = $(OBJDIR)/plsh.o $(OBJDIR)/errors.o $(OBJDIR)/context.o $(OBJDIR)/exec.o
 
 .PHONY: all clean
 

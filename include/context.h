@@ -1,15 +1,55 @@
 #ifndef CONTEXT_H
 #define CONTEXT_H
+#include <stdio.h>
 #include <stdbool.h>
 
-typedef enum context {
-    START,
-    VAR,
-    LAMBDA,
-    LINE_LAMBDA,
-    CAPTURE,
-    PIPE
-} context;
+typedef struct Env {
+    char **argv;
+    char **names;
+    char **values;
+    int nvals;
+} Env;
+
+typedef struct EnvStack {
+    int last_exit_code;
+    Env **env_stack;
+    int nstacks;
+} EnvStack;
+
+/*
+ * Pushes a new environment to the stack.
+ */
+void push_stack(EnvStack *stack, char *argv[]);
+
+/*
+ * Pops the top environment.
+ */
+void pop_stack(EnvStack *stack);
+
+/*
+ * Returns the current environment.
+ */
+Env * get_env(EnvStack *stack);
+
+/*
+ * Returns a variable from the stack.
+ */
+char * get_stack_var(EnvStack *stack, char *name);
+
+/*
+ * Adds a variable to the stack.
+ */
+void add_stack_var(EnvStack *stack, char *name, char *value);
+
+/*
+ * Returns the last exit code.
+ */
+int get_last_exit_code(EnvStack *stack);
+
+/*
+ * Updates the last exit code.
+ */
+void update_last_exit_code(EnvStack *stack, int exit_code);
 
 /*
  * Seeks the stream util a given character is found (the given char is
@@ -28,14 +68,6 @@ void seek_spaces(FILE *stream);
  * Seeks the stream until a newline character (consumes the newline).
  */
 void seek_onto_newline(FILE *stream);
-
-/*
- * Seeks the stream for a ACTION OPERATOR pair, where a operator is one of the
- * following: '=', '|'. The operator is returned and the action is stored in
- * **action. The search ends at a newline. If a action operator is not found,
- * a 0 is returned.
- */
-char seek_onto_action_operator_pair(FILE *stream, char **action);
 
 /*
  * Peeks at the stream until either the specified character is found or the

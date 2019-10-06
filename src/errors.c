@@ -33,6 +33,11 @@ void die_invalid_syntax(char *msg, int linenum) {
     exit(1);
 }
 
+void die_errno(char* msg) {
+    perror(msg);
+    exit(1);
+}
+
 void die_no_mem() {
     errno = ENOMEM;
     perror("");
