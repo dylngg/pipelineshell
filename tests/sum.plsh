@@ -1,0 +1,7 @@
+#!/Users/dylngg/Documents/programming/pipelineshell/plsh
+# Sums the numbers in stdin (seperated by newline)
+total=0
+{
+    total=(expr $total + $.)
+}
+echo $total

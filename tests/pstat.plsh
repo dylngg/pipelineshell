@@ -1,0 +1,30 @@
+#!/Users/dylngg/Documents/programming/pipelineshell/plsh
+# Prints useful information about a process by name
+
+# Get the all the processes by that name
+pids=(pgrep $1)
+
+# Loop through the processes
+echo $pids | {
+    pid="$."
+    status="cat /proc/$./status"
+
+    # For each desired field
+    echo "^Name: ^Pid: ^PPid: ^Uid: ^VmRSS" | tr ' ' $'\n' {
+
+        # Find that line in the status file, eliminate unneccesary whitespace
+        # and replace the first whitespace with a tab to line things up nicely
+        cat "/proc/$./status" | grep "$." | xargs | sed -e 's/ /\t /'
+    }
+}
+
+# Alternatively (and in my opinion, more pipeline-ish)
+pretty_proc_status = [
+    pid="$."
+    shift
+    echo "$@" | tr ' ' $'\n' | {
+        cat "/proc/$pid/status" | grep $. | xargs | sed -e 's/ /\t /'
+    }
+]
+
+pgrep $1 | { pretty_proc_status ^Name: ^Pid: ^PPid: ^Uid: ^VmRSS }
