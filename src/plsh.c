@@ -55,15 +55,12 @@ char *parse_start(FILE *stream, int *linenum, EnvStack *stack, int nchars, ...) 
     va_end(ap);
 
 top:
-    //printf("Parsing start\n");
     c = peek_char(stream);
     for (int j = 0; j < nchars; j++) {
         if (c == stop_chars[j]) {
-            //printf("Stopping early b/c %c\n", c);
             return result;
         }
     }
-    //printf("Evaluating %c ", c);
     switch(c) {
         case ' ':
         case '\t':
@@ -107,7 +104,6 @@ top:
 }
 
 exit_t parse_action(FILE *stream, int *linenum, EnvStack *stack) {
-    //printf("Parsing action: ");
     char *name = NULL;
     char *value = NULL;
     char **argv;
@@ -120,14 +116,12 @@ exit_t parse_action(FILE *stream, int *linenum, EnvStack *stack) {
                 break;
 
             case '=':
-                //printf("\tassigning:\n\t\t");
                 getc(stream);  // Comsume '"'
                 value = parse_start(stream, linenum, stack, 2, '\n', ';');
                 if (value) add_stack_var(stack, name, value);
                 goto finish;
 
             default:
-                //printf("\tcommanding:\n\t\t");
                 argv = parse_args(stream, name, linenum, stack);
 
                 push_stack(stack, argv);
@@ -150,7 +144,6 @@ char *parse_capture(FILE *stream, EnvStack *stack) {
 }
 
 char **parse_args(FILE *stream, char *command, int *linenum, EnvStack *stack) {
-    //printf("Parsing args: ");
     long conf_max_args = sysconf(_SC_ARG_MAX);
     size_t max_args = 64;
     if (conf_max_args > 0) max_args = (size_t) conf_max_args;
@@ -174,7 +167,6 @@ char **parse_args(FILE *stream, char *command, int *linenum, EnvStack *stack) {
 char *parse_string(FILE *stream, int *linenum, EnvStack *stack) {
     StrBuilder *build = str_build_create();
     assert(getc(stream) == '"');
-    //printf("Parsing string: ");
 
     char c;
     while((c = getc(stream)) != EOF) {
