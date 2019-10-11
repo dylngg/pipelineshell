@@ -59,11 +59,11 @@ void set_last_exit_code(EnvStack *stack, exit_t code);
 char peek_char(FILE *stream);
 
 /*
- * Seeks the stream util a given character is found (the given char is
- * consumed), or EOF is found. Returns the last character found and puts the
- * seeked string (without the given char) into the allocated result buffer.
+ * Seeks the stream util a given character is found or EOF is found. Returns
+ * the found character and puts the seeked string (without the given char)
+ * into the allocated result buffer.
  */
-char seek_until_consume_chars(FILE *stream, char *result[], int nchars, ...);
+char seek_until_chars(FILE *stream, char *result[], int nchars, ...);
 
 /*
  * Seeks the stream up to a non-space character (consumes the string, but not

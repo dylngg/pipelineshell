@@ -105,7 +105,7 @@ char peek_char(FILE *stream) {
     return ungetc(c, stream);
 }
 
-char seek_until_consume_chars(FILE *stream, char *result[], int nchars, ...) {
+char seek_until_chars(FILE *stream, char *result[], int nchars, ...) {
     assert(result);
     StrBuilder* build = str_build_create();
 
@@ -116,16 +116,17 @@ char seek_until_consume_chars(FILE *stream, char *result[], int nchars, ...) {
     va_end(ap);
 
     char c;
-    while((c = getc(stream)) != EOF) {
+    while((c = peek_char(stream)) != EOF) {
         for (int i = 0; i < nchars; i++)
             if (c == stop_chars[i]) goto finish;
         str_build_add_c(build, c);
+        getc(stream);
     }
 
 finish:
     *result = str_build_to_str(build);
     free(build);
-    return c;
+    return c;  // Restore the stop char
 }
 
 char seek_for_spaces(FILE *stream) {
