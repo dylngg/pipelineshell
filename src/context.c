@@ -9,21 +9,20 @@
 
 #include "context.h"
 #include "errors.h"
+#include "utils.h"
 
 #define RESULT_BUF_SIZE 32
 
 void push_stack(EnvStack *stack, char* argv[]) {
     if (!stack) {
-        stack = malloc(sizeof *stack);
-        if (!stack) die_no_mem();
+        stack = must_malloc(sizeof *stack);
         stack->env_stack = NULL;
         stack->nstacks = 0;
-        stack->last_exit_code = 0;
+        stack->last_code = 0;
     }
-    stack->env_stack = realloc(stack->env_stack, sizeof(Env *) * (stack->nstacks + 1));
-    if (!stack->env_stack) die_no_mem();
+    stack->env_stack = must_realloc(stack->env_stack, sizeof(Env *) * (stack->nstacks + 1));
 
-    Env *new = malloc(sizeof *new);
+    Env *new = must_malloc(sizeof *new);
     new->argv = argv;
     new->names = NULL;
     new->values = NULL;
@@ -46,9 +45,8 @@ void pop_stack(EnvStack *stack) {
     free(toremove->values);
     free(toremove);
     stack->nstacks--;
-    stack->env_stack = realloc(stack->env_stack,
+    stack->env_stack = must_realloc(stack->env_stack,
                                sizeof(*(stack->env_stack)) * stack->nstacks);
-    if (!stack->env_stack) die_no_mem();
 }
 
 Env * get_env(EnvStack *stack) {
@@ -86,28 +84,30 @@ void add_stack_var(EnvStack *stack, char* name, char* value) {
 
     // If none, add a new variable
     Env *top = stack->env_stack[top_index];
-    top->names = realloc(top->names, sizeof *(top->names) * top->nvals + 1);
+    top->names = must_realloc(top->names, sizeof *(top->names) * top->nvals + 1);
     top->names[top->nvals] = strdup(name);
-    top->values = realloc(top->values, sizeof *(top->values) * top->nvals + 1);
+    top->values = must_realloc(top->values, sizeof *(top->values) * top->nvals + 1);
     top->values[top->nvals] = strdup(value);
     top->nvals++;
     return;
 }
 
-int get_last_exit_code(EnvStack* stack) {
-    return stack->last_exit_code;
+exit_t get_last_exit_code(EnvStack* stack) {
+    return stack->last_code;
 }
 
-void update_last_exit_code(EnvStack* stack, int exit_code) {
-    stack->last_exit_code = exit_code;
+void set_last_exit_code(EnvStack* stack, exit_t code) {
+    stack->last_code = code;
 }
 
-char seek_onto_chars(FILE *stream, char *result[], int nchars, ...) {
+char peek_char(FILE *stream) {
+    char c = getc(stream);
+    return ungetc(c, stream);
+}
+
+char seek_until_consume_chars(FILE *stream, char *result[], int nchars, ...) {
     assert(result);
-    char *buf = NULL;
-    size_t bufsize = RESULT_BUF_SIZE;
-    buf = malloc(sizeof *buf * bufsize);
-    if (!buf) die_no_mem();
+    StrBuilder* build = str_build_create();
 
     va_list ap;
     va_start(ap, nchars);
@@ -116,65 +116,25 @@ char seek_onto_chars(FILE *stream, char *result[], int nchars, ...) {
     va_end(ap);
 
     char c;
-    size_t curr_size = 0;
     while((c = getc(stream)) != EOF) {
-        // + 2 for curr char and null terminator
-        if (curr_size + 2 >= bufsize) {
-            bufsize *= 2;
-            // FIXME: Non-GNU will not free new alloc
-            buf = realloc(buf, bufsize);
-            if (!buf) die_no_mem();
-        }
-        buf[curr_size] = c;
-
-        for (int j = 0; j < nchars; j++) {
-            if (c == stop_chars[j]) goto finish;
-        }
-        curr_size++;
+        for (int i = 0; i < nchars; i++)
+            if (c == stop_chars[i]) goto finish;
+        str_build_add_c(build, c);
     }
 
 finish:
-    buf[curr_size] = '\0';
-    // Free any memory we don't need.
-    buf = realloc(buf, curr_size);
-    if (!buf) die_no_mem();
-    *result = buf;
+    *result = str_build_to_str(build);
+    free(build);
     return c;
 }
 
-void seek_spaces(FILE *stream) {
+char seek_for_spaces(FILE *stream, int *linenum) {
     char c;
-    while((c = getc(stream)) != EOF && isspace(c));
-    ungetc(c, stream); // Undo pulling of non space character
+    while((c = getc(stream)) != EOF && isspace(c)) if (c == '\n') *linenum = *linenum + 1;
+    return ungetc(c, stream); // Undo pulling of non space character
 }
 
-void seek_onto_newline(FILE *stream) {
+void seek_onto_newline(FILE *stream, int *linenum) {
     char c;
-    while((c = getc(stream)) != EOF && c != '\n');
-}
-
-bool contains_before_chars(FILE *stream, char want, int nchars, ...) {
-    va_list ap;
-    va_start(ap, nchars);
-    char stop_chars[nchars];
-    for (int i = 0; i < nchars; i++) stop_chars[i] = va_arg(ap, int);
-    va_end(ap);
-
-    char c = '\0';
-    bool contains = false;
-    size_t peeked = 0;
-    do {
-        if (c == want) {
-            contains = true;
-            break;
-        }
-        for (int j = 0; j < nchars; j++) {
-            if (c == stop_chars[j]) break;
-        }
-        peeked += sizeof(c);
-    } while((c = getc(stream)) != EOF);
-
-    // Go back to where we were
-    fseek(stream, -peeked, SEEK_CUR);
-    return contains;
+    while((c = getc(stream)) != EOF && c != '\n') if (c == '\n') *linenum = *linenum + 1;
 }
