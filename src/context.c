@@ -131,17 +131,19 @@ finish:
 
 char seek_for_spaces(FILE *stream) {
     char c;
-    while((c = getc(stream)) != EOF && c != '\n') continue;
+    while((c = getc(stream)) != EOF && c == ' ') continue;
     return ungetc(c, stream); // Undo pulling of newline
 }
 
 char seek_for_whitespace(FILE *stream, int *linenum) {
     char c;
-    while((c = getc(stream)) != EOF && isspace(c)) if (c == '\n') *linenum = *linenum + 1;
+    while((c = getc(stream)) != EOF && isspace(c));
+    if (c == '\n') *linenum = *linenum + 1;
     return ungetc(c, stream); // Undo pulling of non space character
 }
 
 void seek_onto_newline(FILE *stream, int *linenum) {
     char c;
-    while((c = getc(stream)) != EOF && c != '\n') if (c == '\n') *linenum = *linenum + 1;
+    while((c = getc(stream)) != EOF && c != '\n');
+    if (c == '\n') *linenum = *linenum + 1;
 }
