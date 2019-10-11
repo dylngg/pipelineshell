@@ -31,6 +31,14 @@ void push_stack(EnvStack *stack, char* argv[]) {
     stack->nstacks++;
 }
 
+void push_stack_from_prev(EnvStack *stack) {
+    assert(stack);
+    assert(stack->nstacks > 0);
+
+    Env *prev = stack->env_stack[stack->nstacks - 1];
+    push_stack(stack, prev->argv);
+}
+
 void pop_stack(EnvStack *stack) {
     assert(stack);
     assert(stack->nstacks > 0);

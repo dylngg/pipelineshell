@@ -24,6 +24,11 @@ typedef struct EnvStack {
 void push_stack(EnvStack *stack, char *argv[]);
 
 /*
+ * Pushes a new environment to the stack using the previous stack's argv.
+ */
+void push_stack_from_prev(EnvStack *stack);
+
+/*
  * Pops the top environment.
  */
 void pop_stack(EnvStack *stack);
