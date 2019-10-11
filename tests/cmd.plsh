@@ -1,2 +1,3 @@
 #!/Users/dylngg/Documents/programming/pipelineshell/plsh
 echo "hi"
+echo "$?"

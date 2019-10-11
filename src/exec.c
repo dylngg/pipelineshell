@@ -5,7 +5,7 @@
 #include "errors.h"
 #include "exec.h"
 
-int run(char* command, EnvStack* stack) {
+exit_t run(char* command, EnvStack* stack) {
     Env* env = get_env(stack);
     char** argv = env->argv;
     pid_t pid;
@@ -20,8 +20,8 @@ int run(char* command, EnvStack* stack) {
         // Parent process
         int exit_code = 0;
         waitpid(pid, &exit_code, 0);
-        update_last_exit_code(stack, exit_code);
-        return exit_code;
+        // FIXME: Get actual exit code
+        return (exit_t) exit_code;
     }
     return 0;
 }

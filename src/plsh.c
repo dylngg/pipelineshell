@@ -1,19 +1,24 @@
 #include <assert.h>
 #include <ctype.h>
-#include <stdlib.h>
-#include <stdio.h>
 #include <string.h>
+#include <stdarg.h>
+#include <stddef.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
 
-#include "errors.h"
 #include "context.h"
+#include "errors.h"
 #include "exec.h"
+#include "utils.h"
 
-void parse_start(FILE *stream, char c, int *linenum, EnvStack *stack);
-void parse_action(FILE *stream, int *linenum, EnvStack *stack);
+char *parse_start(FILE *stream, int *linenum, EnvStack *stack, int nchars, ...);
+exit_t parse_action(FILE *stream, int *linenum, EnvStack *stack);
 void parse_assignment(FILE *stream, int *linenum, EnvStack *stack);
-int parse_command(FILE *stream, int *linenum, EnvStack *stack);
-void parse_args(FILE *stream, char *command, EnvStack *stack);
-char *parse_string(char *string);
+char *parse_capture(FILE *stream, EnvStack *stack);
+char **parse_args(FILE *stream, char *command, int *linenum, EnvStack *stack);
+char *parse_string(FILE *stream, int *linenum, EnvStack *stack);
+char *parse_var(FILE *stream);
 
 int main(int argc, char *argv[]) {
     if (argc < 2) {
@@ -29,42 +34,58 @@ int main(int argc, char *argv[]) {
     }
 
     EnvStack stack = {0};
-    push_stack(&stack, argv++);
-    update_last_exit_code(&stack, 0);
+    push_stack(&stack, argv + 2);
     int linenum = 1;
-    char c = getc(stream);
-    do {
-        parse_start(stream, c, &linenum, &stack);
-    } while((c = getc(stream)) != EOF);
+    while(peek_char(stream) != EOF) {
+        parse_start(stream, &linenum, &stack, 1, EOF);
+    }
 
     fclose(stream);
     return 0;
 }
 
-void parse_start(FILE *stream, char c, int *linenum, EnvStack *stack) {
-    if (isalpha(c)) {
-        parse_action(stream, linenum, stack);
-        return;
-    }
+char *parse_start(FILE *stream, int *linenum, EnvStack *stack, int nchars, ...) {
+    char *result = NULL;
+    char c;
 
+    va_list ap;
+    va_start(ap, nchars);
+    char stop_chars[nchars];
+    for (int i = 0; i < nchars; i++) stop_chars[i] = va_arg(ap, int);
+    va_end(ap);
+
+top:
+    //printf("Parsing start\n");
+    c = peek_char(stream);
+    for (int j = 0; j < nchars; j++) {
+        if (c == stop_chars[j]) {
+            //printf("Stopping early b/c %c\n", c);
+            return result;
+        }
+    }
+    //printf("Evaluating %c ", c);
     switch(c) {
+        case ' ':
+        case '\t':
         case '\n':
-            (*linenum)++;
-        case ';':
-            break;
+            seek_for_spaces(stream, linenum);
+            goto top;
 
         case '#':
-            seek_onto_newline(stream);
-            (*linenum)++;
+            seek_onto_newline(stream, linenum);
+            goto top;
+
+        case 'a' ... 'z':
+        case 'A' ... 'Z':
+            parse_action(stream, linenum, stack);
             break;
 
-        case ' ':
-            seek_spaces(stream);
+        case '"':
+            result = parse_string(stream, linenum, stack);
             break;
 
-        //case '"':
-            // FIXME: What if multiple lines
-            //break;
+        //case '$':
+            // Expand into args
 
         //case '(':
             // FIXME: What if multiple lines
@@ -75,75 +96,124 @@ void parse_start(FILE *stream, char c, int *linenum, EnvStack *stack) {
 
         //case '{':
 
+        case ';':
+        case EOF:
+            break;
+
         default:
-            die_invalid_syntax("Invalid start character", *linenum);
+            die_invalid_syntax("Invalid syntax", *linenum);
     }
-    return;
+    return result;
 }
 
-void parse_action(FILE *stream, int *linenum, EnvStack *stack) {
-    if (contains_before_chars(stream, '=', 3, ' ', '\t', '\n')) {
-        parse_assignment(stream, linenum, stack);
-    }
-    parse_command(stream, linenum, stack);
-}
+exit_t parse_action(FILE *stream, int *linenum, EnvStack *stack) {
+    //printf("Parsing action: ");
+    char *name = NULL;
+    char *value = NULL;
+    char **argv;
+    exit_t code = 0;
 
-void parse_assignment(FILE *stream, int *linenum, EnvStack *stack) {
-    exit(1);
-}
-
-int parse_command(FILE *stream, int *linenum, EnvStack *stack) {
-    char *command = NULL;
-    char last = seek_onto_chars(stream, &command, 3, ' ', '\t', '\n');
-    if (last != '\n') {
-        parse_args(stream, command, stack);
-    }
-    else {
-        char** argv = malloc(sizeof *argv * 2);
-        if (!argv) die_no_mem();
-        argv[0] = strdup(command);
-        argv[1] = NULL;
-        if (!argv[0]) die_no_mem();
-        push_stack(stack, argv);
-    }
-
-    int r = run(command, stack);
-    pop_stack(stack);
-    free(command);
-    return r;
-}
-
-void parse_args(FILE *stream, char *command, EnvStack *stack) {
-    size_t bufsize = 32;
-    char **argv_buf = malloc(sizeof *argv_buf * bufsize);
-    if (!argv_buf) die_no_mem();
-    argv_buf[0] = strdup(command);
-    size_t curr_size = 1;
-
-    char last;
-    char *arg = "";
+    char c = seek_until_consume_chars(stream, &name, 3, ' ', '=', '\n');
     do {
-        last = seek_onto_chars(stream, &arg, 3, ' ', '\t', '\n');
-        if (arg[0] == '"') arg = parse_string(arg);
-        argv_buf[curr_size++] = arg;
-        if (last == EOF || last == '\n') break;
+        switch(c) {
+            case ' ':
+                break;
 
-        // + 1 for null terminator
-        if (curr_size + 1 >= bufsize) {
-            bufsize *= 2;
-            // FIXME: Non-GNU will not free new alloc
-            argv_buf = realloc(argv_buf, bufsize);
-            if (!argv_buf) die_no_mem();
+            case '=':
+                //printf("\tassigning:\n\t\t");
+                getc(stream);  // Comsume '"'
+                value = parse_start(stream, linenum, stack, 2, '\n', ';');
+                if (value) add_stack_var(stack, name, value);
+                goto finish;
+
+            default:
+                //printf("\tcommanding:\n\t\t");
+                argv = parse_args(stream, name, linenum, stack);
+
+                push_stack(stack, argv);
+                // FIXME: Figure out how to return exit code and result
+                code = run(name, stack);
+                set_last_exit_code(stack, code);
+                pop_stack(stack);
+                goto finish;
         }
-    } while(true);
+    } while((c = peek_char(stream)) != EOF);
 
-    // Free any memory we don't need.
-    argv_buf[curr_size] = NULL;
-    argv_buf = realloc(argv_buf, sizeof(*argv_buf) * (curr_size + 1));
-    if (!argv_buf) die_no_mem();
-    push_stack(stack, argv_buf);
+finish:
+    if (name) free(name);
+    if (value) free(value);
+    return code;
 }
 
-char *parse_string(char *string) {
-    return strdup(string);
+char *parse_capture(FILE *stream, EnvStack *stack) {
+    return "";
+}
+
+char **parse_args(FILE *stream, char *command, int *linenum, EnvStack *stack) {
+    //printf("Parsing args: ");
+    long conf_max_args = sysconf(_SC_ARG_MAX);
+    size_t max_args = 64;
+    if (conf_max_args > 0) max_args = (size_t) conf_max_args;
+    char **argv_buf = must_malloc(sizeof *argv_buf * max_args);
+    argv_buf[0] = strdup(command);
+    size_t argc = 1;
+
+    char* arg;
+    // FIXME: Using parse_start causes things without quotes to run as commands
+    while((arg = parse_start(stream, linenum, stack, 3, ';', '\n', ' ')) != NULL) {
+        //printf("arg: [%s] ", arg);
+        if (argc >= max_args) die_invalid_syntax("Too many args", *linenum);
+        argv_buf[argc++] = arg;
+    }
+
+    argv_buf[argc] = NULL;
+    argv_buf = must_realloc(argv_buf, sizeof(*argv_buf) * (argc + 1));
+    return argv_buf;
+}
+
+char *parse_string(FILE *stream, int *linenum, EnvStack *stack) {
+    StrBuilder *build = str_build_create();
+    assert(getc(stream) == '"');
+    //printf("Parsing string: ");
+
+    char c;
+    while((c = getc(stream)) != EOF) {
+        switch(c) {
+            case '$':
+                str_build_add_str(build, parse_var(stream));
+
+            case '\\':
+                c = getc(stream);
+                switch(c) {
+                    case 'n': c = '\n'; break;
+                    case 't': c = '\t'; break;
+                    case '\\': c = '\\'; break;
+                    case '"': c = '"'; break;
+                    case '*': c = '*'; break;
+                    case '$': c = '$'; break;
+                }
+                if (c != EOF) str_build_add_c(build, c);
+                break;
+
+            case '\n':
+                *linenum = *linenum + 1;
+
+            case '"':
+                goto finish;
+
+            default:
+                str_build_add_c(build, c);
+        }
+    }
+
+finish:
+    return str_build_to_str(build);
+}
+
+char *parse_var(FILE *stream) {
+    return ""; // FIXME!
+}
+
+char *expand_var(char *var, EnvStack *stack) {
+    return var;
 }
