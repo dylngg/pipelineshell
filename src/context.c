@@ -128,7 +128,13 @@ finish:
     return c;
 }
 
-char seek_for_spaces(FILE *stream, int *linenum) {
+char seek_for_spaces(FILE *stream) {
+    char c;
+    while((c = getc(stream)) != EOF && c != '\n') continue;
+    return ungetc(c, stream); // Undo pulling of newline
+}
+
+char seek_for_whitespace(FILE *stream, int *linenum) {
     char c;
     while((c = getc(stream)) != EOF && isspace(c)) if (c == '\n') *linenum = *linenum + 1;
     return ungetc(c, stream); // Undo pulling of non space character

@@ -66,10 +66,16 @@ char peek_char(FILE *stream);
 char seek_until_consume_chars(FILE *stream, char *result[], int nchars, ...);
 
 /*
+ * Seeks the stream up to a non-space character (consumes the string, but not
+ * the non-space character).
+ */
+char seek_for_spaces(FILE *stream);
+
+/*
  * Seeks the stream up to a non-whitespace character (consumes the string, but
  * not the non-whitespace character).
  */
-char seek_for_spaces(FILE *stream, int *linenum);
+char seek_for_whitespace(FILE *stream, int *linenum);
 
 /*
  * Seeks the stream until a newline character (consumes the newline).
