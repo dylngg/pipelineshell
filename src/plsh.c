@@ -14,7 +14,6 @@
 
 char *parse_start(FILE *stream, int *linenum, EnvStack *stack, int nchars, ...);
 exit_t parse_action(FILE *stream, int *linenum, EnvStack *stack);
-void parse_assignment(FILE *stream, int *linenum, EnvStack *stack);
 char *parse_capture(FILE *stream, EnvStack *stack);
 char **parse_args(FILE *stream, char *command, int *linenum, EnvStack *stack);
 char *parse_string(FILE *stream, int *linenum, EnvStack *stack);
@@ -94,11 +93,16 @@ top:
         //case '{':
 
         case ';':
+            getc(stream);
+            break;
+
         case EOF:
             break;
 
         default:
-            die_invalid_syntax("Invalid syntax", *linenum);
+            seek_until_chars(stream, &result, 3, ' ', '\n', ';');
+            //printf("Found: %s\n", result);
+            break;
     }
     return result;
 }
@@ -108,21 +112,29 @@ exit_t parse_action(FILE *stream, int *linenum, EnvStack *stack) {
     char *value = NULL;
     char **argv;
     exit_t code = 0;
+    char c;
 
-    char c = seek_until_chars(stream, &name, 3, ' ', '=', '\n');
-    getc(stream);
-    do {
+    seek_until_chars(stream, &name, 3, ' ', '=', '\n');
+    while((c = peek_char(stream)) != EOF && c != '\n' && c != ';') {
         switch(c) {
+            case '\t':
             case ' ':
+                seek_for_spaces(stream);
                 break;
 
             case '=':
-                getc(stream);  // Comsume '"'
+                // Is a assignment
+                getc(stream);  // Consume '='
                 value = parse_start(stream, linenum, stack, 2, '\n', ';');
-                if (value) add_stack_var(stack, name, value);
+                if (!value) die_invalid_syntax("Invalid assignment syntax", *linenum);
+                if (value) {
+                    printf("Adding %s=%s\n", name, value);
+                    add_stack_var(stack, name, value);
+                }
                 goto finish;
 
             default:
+                // Is a command
                 argv = parse_args(stream, name, linenum, stack);
 
                 push_stack(stack, argv);
@@ -132,7 +144,7 @@ exit_t parse_action(FILE *stream, int *linenum, EnvStack *stack) {
                 pop_stack(stack);
                 goto finish;
         }
-    } while((c = peek_char(stream)) != EOF);
+    }
 
 finish:
     if (name) free(name);
