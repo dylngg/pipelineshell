@@ -65,7 +65,7 @@ top:
         case ' ':
         case '\t':
         case '\n':
-            seek_for_spaces(stream, linenum);
+            seek_for_whitespace(stream, linenum);
             goto top;
 
         case '#':
@@ -109,7 +109,8 @@ exit_t parse_action(FILE *stream, int *linenum, EnvStack *stack) {
     char **argv;
     exit_t code = 0;
 
-    char c = seek_until_consume_chars(stream, &name, 3, ' ', '=', '\n');
+    char c = seek_until_chars(stream, &name, 3, ' ', '=', '\n');
+    getc(stream);
     do {
         switch(c) {
             case ' ':
@@ -147,18 +148,51 @@ char **parse_args(FILE *stream, char *command, int *linenum, EnvStack *stack) {
     long conf_max_args = sysconf(_SC_ARG_MAX);
     size_t max_args = 64;
     if (conf_max_args > 0) max_args = (size_t) conf_max_args;
+
     char **argv_buf = must_malloc(sizeof *argv_buf * max_args);
     argv_buf[0] = strdup(command);
     size_t argc = 1;
 
-    char* arg;
-    // FIXME: Using parse_start causes things without quotes to run as commands
-    while((arg = parse_start(stream, linenum, stack, 3, ';', '\n', ' ')) != NULL) {
-        //printf("arg: [%s] ", arg);
+    char* arg = "";
+    char c;
+    bool complete_arg = false;
+    while((c = peek_char(stream)) != EOF && c != '\n' && c != ';') {
+        switch(c) {
+            case '#':
+                seek_onto_newline(stream, linenum);
+                goto finish;
+
+            case ' ':
+                seek_for_spaces(stream);
+                complete_arg = false;
+                break;
+
+            case '\n':
+                fprintf(stderr, "\\n cannot be arg.\n");
+                assert(false);
+
+            case '$':
+                getc(stream);
+                arg = parse_var(stream);
+                complete_arg = true;
+                break;
+
+            case '"':
+                arg = parse_string(stream, linenum, stack);
+                complete_arg = true;
+                break;
+
+            default:
+                c = seek_until_chars(stream, &arg, 3, ' ', '\n', ';');
+                complete_arg = true;
+        }
         if (argc >= max_args) die_invalid_syntax("Too many args", *linenum);
-        argv_buf[argc++] = arg;
+        if (complete_arg) {
+            argv_buf[argc++] = arg;
+        }
     }
 
+finish:
     argv_buf[argc] = NULL;
     argv_buf = must_realloc(argv_buf, sizeof(*argv_buf) * (argc + 1));
     return argv_buf;
