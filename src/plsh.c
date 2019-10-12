@@ -179,7 +179,7 @@ char **parse_args(FILE *stream, char *command, int *linenum, EnvStack *stack) {
     if (conf_max_args > 0) max_args = (size_t) conf_max_args;
 
     char **argv_buf = must_malloc(sizeof *argv_buf * max_args);
-    argv_buf[0] = strdup(command);
+    argv_buf[0] = must_strdup(command);
     size_t argc = 1;
 
     char* arg = "";

@@ -43,7 +43,6 @@ void str_build_add_substr(StrBuilder *build, char *str, int start, int end) {
 }
 
 char *str_build_to_str(StrBuilder* build) {
-    // FIXME: Non-GNU will not free new alloc
     build->buf = must_realloc(build->buf, build->size + 1);  // Plus null terminator
     build->buf[build->size] = '\0';
     return build->buf;
@@ -56,14 +55,21 @@ void *must_malloc(size_t size) {
 }
 
 void *must_realloc(void* ptr, size_t size) {
+    // FIXME: Non-GNU will not free new alloc
     ptr = realloc(ptr, size);
     if (!ptr) die_no_mem();
     return ptr;
 }
 
+char *must_strdup(char *string) {
+    string = strdup(string);
+    if (!string) die_no_mem();
+    return string;
+}
+
 char **copy_argv(char *argv[], int argc) {
     char **new_argv = malloc(sizeof *new_argv * (argc + 1));
-    for (int i = 0; i < argc; i++) new_argv[i] = strdup(argv[i]);
+    for (int i = 0; i < argc; i++) new_argv[i] = must_strdup(argv[i]);
     new_argv[argc] = NULL;
     return new_argv;
 }

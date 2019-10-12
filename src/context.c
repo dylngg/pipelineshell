@@ -96,9 +96,9 @@ void add_stack_var(EnvStack *stack, char* name, char* value) {
     // If none, add a new variable
     Env *top = stack->env_stack[top_index];
     top->names = must_realloc(top->names, sizeof *(top->names) * top->nvals + 1);
-    top->names[top->nvals] = strdup(name);
+    top->names[top->nvals] = must_strdup(name);
     top->values = must_realloc(top->values, sizeof *(top->values) * top->nvals + 1);
-    top->values[top->nvals] = strdup(value);
+    top->values[top->nvals] = must_strdup(value);
     top->nvals++;
     return;
 }

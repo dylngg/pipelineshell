@@ -44,6 +44,11 @@ void *must_malloc(size_t size);
 void *must_realloc(void* ptr, size_t size);
 
 /*
+ * Strdups and dies if ENOMEM.
+ */
+char *must_strdup(char *string);
+
+/*
  * Copies argv and it's contents.
  */
 char **copy_argv(char *argv[], int argc);
