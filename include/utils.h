@@ -43,4 +43,9 @@ void *must_malloc(size_t size);
  */
 void *must_realloc(void* ptr, size_t size);
 
+/*
+ * Copies argv and it's contents.
+ */
+char **copy_argv(char *argv[], int argc);
+
 #endif // UTILS_H

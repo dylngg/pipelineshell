@@ -9,6 +9,7 @@
 
 #include "context.h"
 #include "errors.h"
+#include "exec.h"
 #include "utils.h"
 
 #define RESULT_BUF_SIZE 32
@@ -44,7 +45,9 @@ void pop_stack(EnvStack *stack) {
     assert(stack->nstacks > 0);
 
     Env* toremove = stack->env_stack[stack->nstacks - 1];
-    free(toremove->argv);
+    char **argv = toremove->argv;
+    for (int i = 0; argv[i] != NULL; i++) free(argv[i]);
+    free(argv);
     for (int i = 0; i < toremove->nvals; i++) {
         free(toremove->names[i]);
         free(toremove->values[i]);

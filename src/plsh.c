@@ -12,9 +12,9 @@
 #include "exec.h"
 #include "utils.h"
 
+char *parse_scope(FILE *stream, char *argv[], int *linenum, EnvStack *stack, int nchars, ...);
 char *parse_start(FILE *stream, int *linenum, EnvStack *stack, int nchars, ...);
 exit_t parse_action(FILE *stream, int *linenum, EnvStack *stack);
-char *parse_capture(FILE *stream, EnvStack *stack);
 char **parse_args(FILE *stream, char *command, int *linenum, EnvStack *stack);
 char *parse_string(FILE *stream, int *linenum, EnvStack *stack);
 char *parse_var(FILE *stream);
@@ -33,14 +33,35 @@ int main(int argc, char *argv[]) {
     }
 
     EnvStack stack = {0};
-    push_stack(&stack, argv + 2);
     int linenum = 1;
-    while(peek_char(stream) != EOF) {
-        parse_start(stream, &linenum, &stack, 1, EOF);
-    }
+    // When we pop the stack, we free all the resources; argv is not allocated
+    char **argv_copy = copy_argv(argv, argc);
+    parse_scope(stream, argv_copy, &linenum, &stack, 0);
 
     fclose(stream);
     return 0;
+}
+
+char *parse_scope(FILE *stream, char *argv[], int *linenum, EnvStack *stack, int nchars, ...) {
+    if (argv) push_stack(stack, argv);
+    else push_stack_from_prev(stack);
+
+    va_list ap;
+    va_start(ap, nchars);
+    char stop_chars[nchars];
+    for (int i = 0; i < nchars; i++) stop_chars[i] = va_arg(ap, int);
+    va_end(ap);
+
+    char *result;
+    char c;
+    while((c = peek_char(stream)) != EOF) {
+        for (int j = 0; j < nchars; j++) if (c == stop_chars[j]) goto finish;
+        result = parse_start(stream, linenum, stack, 1, EOF);
+    }
+
+finish:
+    pop_stack(stack);
+    return result;
 }
 
 char *parse_start(FILE *stream, int *linenum, EnvStack *stack, int nchars, ...) {
@@ -150,10 +171,6 @@ finish:
     if (name) free(name);
     if (value) free(value);
     return code;
-}
-
-char *parse_capture(FILE *stream, EnvStack *stack) {
-    return "";
 }
 
 char **parse_args(FILE *stream, char *command, int *linenum, EnvStack *stack) {

@@ -60,3 +60,10 @@ void *must_realloc(void* ptr, size_t size) {
     if (!ptr) die_no_mem();
     return ptr;
 }
+
+char **copy_argv(char *argv[], int argc) {
+    char **new_argv = malloc(sizeof *new_argv * (argc + 1));
+    for (int i = 0; i < argc; i++) new_argv[i] = strdup(argv[i]);
+    new_argv[argc] = NULL;
+    return new_argv;
+}
