@@ -12,9 +12,11 @@
 #include "exec.h"
 #include "utils.h"
 
-char *parse_scope(FILE *stream, char *argv[], int *linenum, EnvStack *stack, int nchars, ...);
-char *parse_start(FILE *stream, int *linenum, EnvStack *stack, int nchars, ...);
-exit_t parse_action(FILE *stream, int *linenum, EnvStack *stack);
+Result *parse_scope(FILE *stream, char *argv[], int *linenum, EnvStack *stack, int nchars, ...);
+Result *parse_start(FILE *stream, int *linenum, EnvStack *stack, int nchars, ...);
+Result *parse_action(FILE *stream, int *linenum, EnvStack *stack);
+Result *parse_assignment(FILE *stream, char *name, int *linenum, EnvStack *stack);
+Result *parse_command(FILE *stream, char *name, int *linenum, EnvStack *stack);
 char **parse_args(FILE *stream, char *command, int *linenum, EnvStack *stack);
 char *parse_string(FILE *stream, int *linenum, EnvStack *stack);
 char *parse_var(FILE *stream);
@@ -36,13 +38,15 @@ int main(int argc, char *argv[]) {
     int linenum = 1;
     // When we pop the stack, we free all the resources; argv is not allocated
     char **argv_copy = copy_argv(argv, argc);
-    parse_scope(stream, argv_copy, &linenum, &stack, 0);
+    Result *result = parse_scope(stream, argv_copy, &linenum, &stack, 0);
+    exit_t code = result->code;
+    destroy_result(result);
 
     fclose(stream);
-    return 0;
+    return code;
 }
 
-char *parse_scope(FILE *stream, char *argv[], int *linenum, EnvStack *stack, int nchars, ...) {
+Result *parse_scope(FILE *stream, char *argv[], int *linenum, EnvStack *stack, int nchars, ...) {
     if (argv) push_stack(stack, argv);
     else push_stack_from_prev(stack);
 
@@ -52,20 +56,22 @@ char *parse_scope(FILE *stream, char *argv[], int *linenum, EnvStack *stack, int
     for (int i = 0; i < nchars; i++) stop_chars[i] = va_arg(ap, int);
     va_end(ap);
 
-    char *result;
+    Result *result = NULL;
     char c;
     while((c = peek_char(stream)) != EOF) {
+        if (result) free(result);  // Free previous result
         for (int j = 0; j < nchars; j++) if (c == stop_chars[j]) goto finish;
         result = parse_start(stream, linenum, stack, 1, EOF);
     }
 
 finish:
     pop_stack(stack);
-    return result;
+    return result ? result : create_empty_result();
 }
 
-char *parse_start(FILE *stream, int *linenum, EnvStack *stack, int nchars, ...) {
-    char *result = NULL;
+Result *parse_start(FILE *stream, int *linenum, EnvStack *stack, int nchars, ...) {
+    Result *result = NULL;
+    char *tmp = "";
     char c;
 
     va_list ap;
@@ -76,11 +82,7 @@ char *parse_start(FILE *stream, int *linenum, EnvStack *stack, int nchars, ...) 
 
 top:
     c = peek_char(stream);
-    for (int j = 0; j < nchars; j++) {
-        if (c == stop_chars[j]) {
-            return result;
-        }
-    }
+    for (int j = 0; j < nchars; j++) if (c == stop_chars[j]) goto finish;
     switch(c) {
         case ' ':
         case '\t':
@@ -94,11 +96,13 @@ top:
 
         case 'a' ... 'z':
         case 'A' ... 'Z':
-            parse_action(stream, linenum, stack);
+            result = parse_action(stream, linenum, stack);
             break;
 
         case '"':
-            result = parse_string(stream, linenum, stack);
+            tmp = parse_string(stream, linenum, stack);
+            result = create_result(tmp);
+            free(tmp);
             break;
 
         //case '$':
@@ -121,56 +125,46 @@ top:
             break;
 
         default:
-            seek_until_chars(stream, &result, 3, ' ', '\n', ';');
-            //printf("Found: %s\n", result);
+            seek_until_chars(stream, &tmp, 4, ' ', '\t', '\n', ';');
+            result = create_result(tmp);
+            free(tmp);
             break;
     }
+finish:
     return result;
 }
 
-exit_t parse_action(FILE *stream, int *linenum, EnvStack *stack) {
+Result *parse_action(FILE *stream, int *linenum, EnvStack *stack) {
     char *name = NULL;
-    char *value = NULL;
-    char **argv;
-    exit_t code = 0;
-    char c;
 
-    seek_until_chars(stream, &name, 3, ' ', '=', '\n');
-    while((c = peek_char(stream)) != EOF && c != '\n' && c != ';') {
-        switch(c) {
-            case '\t':
-            case ' ':
-                seek_for_spaces(stream);
-                break;
+    char c = seek_until_chars(stream, &name, 5, ' ', '\t', '=', ';', '\n');
+    if (c == ' ' || c == '\t') c = seek_for_spaces(stream);
 
-            case '=':
-                // Is a assignment
-                getc(stream);  // Consume '='
-                value = parse_start(stream, linenum, stack, 2, '\n', ';');
-                if (!value) die_invalid_syntax("Invalid assignment syntax", *linenum);
-                if (value) {
-                    printf("Adding %s=%s\n", name, value);
-                    add_stack_var(stack, name, value);
-                }
-                goto finish;
+    if (c == '=')
+        // Is a assignment
+        return parse_assignment(stream, name, linenum, stack);
 
-            default:
-                // Is a command
-                argv = parse_args(stream, name, linenum, stack);
+    // Is a command
+    return parse_command(stream, name, linenum, stack);
+}
 
-                push_stack(stack, argv);
-                // FIXME: Figure out how to return exit code and result
-                code = run(name, stack);
-                set_last_exit_code(stack, code);
-                pop_stack(stack);
-                goto finish;
-        }
-    }
+Result *parse_assignment(FILE *stream, char *name, int *linenum, EnvStack *stack) {
+    getc(stream);  // Consume '='
+    Result *result = parse_start(stream, linenum, stack, 2, '\n', ';');
+    add_stack_var(stack, name, result->output);
+    free(name);
+    return result;
+}
 
-finish:
-    if (name) free(name);
-    if (value) free(value);
-    return code;
+Result *parse_command(FILE *stream, char *name, int *linenum, EnvStack *stack) {
+    char **argv = parse_args(stream, name, linenum, stack);
+
+    push_stack(stack, argv);
+    exit_t code = run(name, argv);
+    set_last_exit_code(stack, code);
+    pop_stack(stack);
+    free(name);
+    return create_cmd_result("", code, STDOUT_FILENO);
 }
 
 char **parse_args(FILE *stream, char *command, int *linenum, EnvStack *stack) {
