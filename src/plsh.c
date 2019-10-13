@@ -17,9 +17,9 @@ Result *parse_start(FILE *stream, int *linenum, EnvStack *stack, int nchars, ...
 Result *parse_action(FILE *stream, int *linenum, EnvStack *stack);
 Result *parse_assignment(FILE *stream, char *name, int *linenum, EnvStack *stack);
 Result *parse_command(FILE *stream, char *name, int *linenum, EnvStack *stack);
-char **parse_args(FILE *stream, char *command, int *linenum, EnvStack *stack);
-char *parse_string(FILE *stream, int *linenum, EnvStack *stack);
-char *parse_var(FILE *stream);
+char **extract_args(char *string, char *command, int *linenum, EnvStack *stack);
+char *extract_string(char *string, int *linenum, EnvStack *stack);
+char *extract_var(char *var, EnvStack *stack);
 
 int main(int argc, char *argv[]) {
     if (argc < 2) {
@@ -61,7 +61,7 @@ Result *parse_scope(FILE *stream, char *argv[], int *linenum, EnvStack *stack, i
     while((c = peek_char(stream)) != EOF) {
         if (result) free(result);  // Free previous result
         for (int j = 0; j < nchars; j++) if (c == stop_chars[j]) goto finish;
-        result = parse_start(stream, linenum, stack, 1, EOF);
+        result = parse_start(stream, linenum, stack, 0);
     }
 
 finish:
@@ -100,8 +100,11 @@ top:
             break;
 
         case '"':
-            tmp = parse_string(stream, linenum, stack);
-            result = create_result(tmp);
+            getc(stream);  // Ignore leading '"'
+            if((c = seek_until_chars(stream, &tmp, 2, '\n', '\"')) == '\n' || c == EOF)
+                die_invalid_syntax("Expected fully quoted '\"'", *linenum);
+            getc(stream);  // Consume ending '"'
+            result = create_result(extract_string(tmp, linenum, stack));
             free(tmp);
             break;
 
@@ -157,7 +160,11 @@ Result *parse_assignment(FILE *stream, char *name, int *linenum, EnvStack *stack
 }
 
 Result *parse_command(FILE *stream, char *name, int *linenum, EnvStack *stack) {
-    char **argv = parse_args(stream, name, linenum, stack);
+    char *args_string = NULL;
+    seek_until_chars(stream, &args_string, 3, '\n', ';', '#');
+    char **argv = extract_args(args_string, name, linenum, stack);
+    free(args_string);
+    free(name);
 
     push_stack(stack, argv);
     exit_t code = run(name, argv);
@@ -167,7 +174,8 @@ Result *parse_command(FILE *stream, char *name, int *linenum, EnvStack *stack) {
     return create_cmd_result("", code, STDOUT_FILENO);
 }
 
-char **parse_args(FILE *stream, char *command, int *linenum, EnvStack *stack) {
+char **extract_args(char *string, char *command, int *linenum, EnvStack *stack) {
+    assert(string);
     long conf_max_args = sysconf(_SC_ARG_MAX);
     size_t max_args = 64;
     if (conf_max_args > 0) max_args = (size_t) conf_max_args;
@@ -176,93 +184,121 @@ char **parse_args(FILE *stream, char *command, int *linenum, EnvStack *stack) {
     argv_buf[0] = must_strdup(command);
     size_t argc = 1;
 
-    char* arg = "";
-    char c;
+    bool reached_end = false;
+    bool empty = false;
+    char *arg = NULL;
     bool complete_arg = false;
-    while((c = peek_char(stream)) != EOF && c != '\n' && c != ';') {
-        switch(c) {
-            case '#':
-                seek_onto_newline(stream, linenum);
-                goto finish;
-
+    char *string_end = string + strlen(string);
+    while(string < string_end) {
+        complete_arg = false;
+        switch(*string) {
+            case '\t':
             case ' ':
-                seek_for_spaces(stream);
-                complete_arg = false;
                 break;
 
-            case '\n':
-                fprintf(stderr, "\\n cannot be arg.\n");
-                assert(false);
-
             case '$':
-                getc(stream);
-                arg = parse_var(stream);
+                // TODO: Handle $(...)
+                string++;
+                arg = strsep(&string, " \t");
+
+                reached_end = (string == NULL);
+                if (reached_end) string = string_end;
+
+                empty = (*arg == '\0');
+                if (empty)
+                    die_invalid_syntax("Expected variable after '$'", *linenum);
+
+                arg = extract_var(arg, stack);
                 complete_arg = true;
                 break;
 
             case '"':
-                arg = parse_string(stream, linenum, stack);
+                string++;
+                arg = strsep(&string, "\"");
+
+                reached_end = (string == NULL);
+                if (reached_end) string = string_end;
+
+                empty = (*arg == '\0');
+                if (empty)
+                    die_invalid_syntax("Expected fully quoted '\"'", *linenum);
+
+                arg = extract_string(arg, linenum, stack);
                 complete_arg = true;
                 break;
 
             default:
-                c = seek_until_chars(stream, &arg, 3, ' ', '\n', ';');
-                complete_arg = true;
-        }
-        if (argc >= max_args) die_invalid_syntax("Too many args", *linenum);
-        if (complete_arg) {
-            argv_buf[argc++] = arg;
-        }
-    }
+                arg = strsep(&string, " \t");
+                empty = (*arg == '\0');
+                assert(!empty);  // Should be handled by ' ' and '\t' cases
 
-finish:
+                reached_end = (string == NULL);
+                if (reached_end) string = string_end;
+
+                arg = must_strdup(arg);
+                complete_arg = true;
+                break;
+        }
+        assert(string);
+        string++;
+        if (argc >= max_args) die_invalid_syntax("Too many args", *linenum);
+        if (complete_arg) argv_buf[argc++] = arg;
+    }
     argv_buf[argc] = NULL;
     argv_buf = must_realloc(argv_buf, sizeof(*argv_buf) * (argc + 1));
     return argv_buf;
 }
 
-char *parse_string(FILE *stream, int *linenum, EnvStack *stack) {
+char *extract_string(char *string, int *linenum, EnvStack *stack) {
     StrBuilder *build = str_build_create();
-    assert(getc(stream) == '"');
+    assert(string);
+    assert(string[0] != '"' && string[strlen(string) - 1] != '"');
 
-    char c;
-    while((c = getc(stream)) != EOF) {
-        switch(c) {
+    bool reached_end = false;
+    bool empty = false;
+    char *tmp = NULL;
+    char *string_end = string + strlen(string);
+    while(string < string_end) {
+        switch(*string) {
             case '$':
-                str_build_add_str(build, parse_var(stream));
+                string++;
+                tmp = strsep(&string, " \t");
 
-            case '\\':
-                c = getc(stream);
-                switch(c) {
-                    case 'n': c = '\n'; break;
-                    case 't': c = '\t'; break;
-                    case '\\': c = '\\'; break;
-                    case '"': c = '"'; break;
-                    case '*': c = '*'; break;
-                    case '$': c = '$'; break;
-                }
-                if (c != EOF) str_build_add_c(build, c);
+                reached_end = (string == NULL);
+                if (reached_end) string = string_end;
+
+                empty = (*tmp == '\0');
+                if (empty)
+                    str_build_add_c(build, '$');
+                else
+                    str_build_add_str(build, tmp);
                 break;
 
-            case '\n':
-                *linenum = *linenum + 1;
-
-            case '"':
-                goto finish;
+            case '\\':
+                string++;
+                switch(*string) {
+                    case 'n': *string = '\n'; break;
+                    case 't': *string = '\t'; break;
+                    case '\\': *string = '\\'; break;
+                    case '"': *string = '"'; break;
+                    case '*': *string = '*'; break;
+                    case '$': *string = '$'; break;
+                }
+                if (*string != '\0') str_build_add_c(build, *string);
+                break;
 
             default:
-                str_build_add_c(build, c);
+                str_build_add_c(build, *string);
+                break;
         }
+        assert(string);
+        string++;
     }
-
-finish:
     return str_build_to_str(build);
 }
 
-char *parse_var(FILE *stream) {
-    return ""; // FIXME!
-}
-
-char *expand_var(char *var, EnvStack *stack) {
-    return var;
+char *extract_var(char *var, EnvStack *stack) {
+    assert(var);
+    assert(var[0] != '$');
+    return strdup(var);
 }
