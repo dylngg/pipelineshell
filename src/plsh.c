@@ -72,6 +72,7 @@ finish:
 Result *parse_start(FILE *stream, int *linenum, EnvStack *stack, int nchars, ...) {
     Result *result = NULL;
     char *tmp = "";
+    char *tmp2 = "";
     char c;
 
     va_list ap;
@@ -108,8 +109,17 @@ top:
             free(tmp);
             break;
 
-        //case '$':
-            // Expand into args
+        case '$':
+            getc(stream);  // Ignore leading '$'
+            c = seek_until_chars(stream, &tmp, 4, '\n', ' ', '\t', ';');
+            if (strlen(tmp) < 1)
+                die_invalid_syntax("Expected variable after '$'", *linenum);
+
+            tmp2 = extract_var(tmp, stack);
+            result = create_result(tmp2);
+            free(tmp);
+            free(tmp2);
+            break;
 
         //case '(':
             // FIXME: What if multiple lines
@@ -271,7 +281,7 @@ char *extract_string(char *string, int *linenum, EnvStack *stack) {
                 if (empty)
                     str_build_add_c(build, '$');
                 else
-                    str_build_add_str(build, tmp);
+                    str_build_add_str(build, extract_var(tmp, stack));
                 break;
 
             case '\\':
@@ -300,5 +310,7 @@ char *extract_string(char *string, int *linenum, EnvStack *stack) {
 char *extract_var(char *var, EnvStack *stack) {
     assert(var);
     assert(var[0] != '$');
-    return strdup(var);
+    char *stack_var = get_stack_var(stack, var);
+    if (!stack_var) return strdup("");
+    return strdup(stack_var);
 }
