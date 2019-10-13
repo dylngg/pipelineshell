@@ -142,14 +142,13 @@ finish:
 
 char seek_for_spaces(FILE *stream) {
     char c;
-    while((c = getc(stream)) != EOF && c == ' ') continue;
+    while((c = getc(stream)) != EOF && (c == ' ' || c == '\t')) continue;
     return ungetc(c, stream); // Undo pulling of newline
 }
 
 char seek_for_whitespace(FILE *stream, int *linenum) {
     char c;
-    while((c = getc(stream)) != EOF && isspace(c));
-    if (c == '\n') *linenum = *linenum + 1;
+    while((c = getc(stream)) != EOF && isspace(c)) if (c == '\n') *linenum = *linenum + 1;
     return ungetc(c, stream); // Undo pulling of non space character
 }
 

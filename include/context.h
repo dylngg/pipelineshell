@@ -71,8 +71,8 @@ char peek_char(FILE *stream);
 char seek_until_chars(FILE *stream, char *result[], int nchars, ...);
 
 /*
- * Seeks the stream up to a non-space character (consumes the string, but not
- * the non-space character).
+ * Seeks the stream up to a non-space character (not ' ' or '\t') (consumes
+ * the string, but not the non-space character).
  */
 char seek_for_spaces(FILE *stream);
 
