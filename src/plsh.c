@@ -17,8 +17,9 @@ Result *parse_start(FILE *stream, int *linenum, EnvStack *stack, int nchars, ...
 Result *parse_action(FILE *stream, int *linenum, EnvStack *stack);
 Result *parse_assignment(FILE *stream, char *name, int *linenum, EnvStack *stack);
 Result *parse_command(FILE *stream, char *name, int *linenum, EnvStack *stack);
+int prepare_commands(FILE *stream, char *first_cmd, int *linenum, EnvStack *stack);
 char **extract_args(char *string, char *command, int *linenum, EnvStack *stack);
-char *extract_string(char *string, int *linenum, EnvStack *stack);
+char *extract_string(char *string, EnvStack *stack);
 char *extract_var(char *var, EnvStack *stack);
 
 int main(int argc, char *argv[]) {
@@ -46,6 +47,7 @@ int main(int argc, char *argv[]) {
     return code;
 }
 
+// FIXME: Why not just use a string instead of varags?
 Result *parse_scope(FILE *stream, char *argv[], int *linenum, EnvStack *stack, int nchars, ...) {
     if (argv) push_stack(stack, argv);
     else push_stack_from_prev(stack);
@@ -69,6 +71,7 @@ finish:
     return result ? result : create_empty_result();
 }
 
+// FIXME: Why not just use a string instead of varags?
 Result *parse_start(FILE *stream, int *linenum, EnvStack *stack, int nchars, ...) {
     Result *result = NULL;
     char *tmp = "";
@@ -104,9 +107,12 @@ top:
             getc(stream);  // Ignore leading '"'
             if((c = seek_until_chars(stream, &tmp, 2, '\n', '\"')) == '\n' || c == EOF)
                 die_invalid_syntax("Expected fully quoted '\"'", *linenum);
+
             getc(stream);  // Consume ending '"'
-            result = create_result(extract_string(tmp, linenum, stack));
+            tmp2 = extract_string(tmp, stack);
+            result = create_result(tmp2);
             free(tmp);
+            free(tmp2);
             break;
 
         case '$':
@@ -150,7 +156,7 @@ finish:
 Result *parse_action(FILE *stream, int *linenum, EnvStack *stack) {
     char *name = NULL;
 
-    char c = seek_until_chars(stream, &name, 5, ' ', '\t', '=', ';', '\n');
+    char c = seek_until_chars(stream, &name, 6, ' ', '\t', '=', ';', '\n', '|');
     if (c == ' ' || c == '\t') c = seek_for_spaces(stream);
 
     if (c == '=')
@@ -170,18 +176,38 @@ Result *parse_assignment(FILE *stream, char *name, int *linenum, EnvStack *stack
 }
 
 Result *parse_command(FILE *stream, char *name, int *linenum, EnvStack *stack) {
-    char *args_string = NULL;
-    seek_until_chars(stream, &args_string, 3, '\n', ';', '#');
-    char **argv = extract_args(args_string, name, linenum, stack);
-    free(args_string);
-    free(name);
+    int ncmds = prepare_commands(stream, name, linenum, stack);
+    Result* result = pipeline_cmds(stack, ncmds);
+    set_last_exit_code(stack, result->code);
+    return result;
+}
 
+int prepare_commands(FILE *stream, char *first_cmd, int *linenum, EnvStack *stack) {
+    // FIXME: Passing the command name in is kinda ugly, we should parse the
+    //        command name in this function.
+    char *args_string = NULL;
+    char *next_cmd = NULL;
+    int ncmds = 1;
+
+    char c = seek_until_chars(stream, &args_string, 4, '\n', ';', '#', '|');
+    char **argv = extract_args(args_string, first_cmd, linenum, stack);
+    free(args_string);
+    free(first_cmd);
+
+    if (c == '|') {
+        getc(stream);  // Consume pipe
+        seek_for_spaces(stream);  // Consume extra space between pipe and cmd
+
+        c = seek_until_chars(stream, &next_cmd, 4, ' ', '\t', ';', '\n');
+        if (c == ' ' || c == '\t')
+            seek_for_spaces(stream);
+        else if (strlen(next_cmd) < 1)
+            die_invalid_syntax("Expected command after '|'", *linenum);
+
+        ncmds += prepare_commands(stream, next_cmd, linenum, stack);
+    }
     push_stack(stack, argv);
-    exit_t code = run(name, argv);
-    set_last_exit_code(stack, code);
-    pop_stack(stack);
-    free(name);
-    return create_cmd_result("", code, STDOUT_FILENO);
+    return ncmds;
 }
 
 char **extract_args(char *string, char *command, int *linenum, EnvStack *stack) {
@@ -204,6 +230,7 @@ char **extract_args(char *string, char *command, int *linenum, EnvStack *stack) 
         switch(*string) {
             case '\t':
             case ' ':
+                string++;
                 break;
 
             case '$':
@@ -220,6 +247,7 @@ char **extract_args(char *string, char *command, int *linenum, EnvStack *stack) 
 
                 arg = extract_var(arg, stack);
                 complete_arg = true;
+                string++;
                 break;
 
             case '"':
@@ -233,8 +261,9 @@ char **extract_args(char *string, char *command, int *linenum, EnvStack *stack) 
                 if (empty)
                     die_invalid_syntax("Expected fully quoted '\"'", *linenum);
 
-                arg = extract_string(arg, linenum, stack);
+                arg = extract_string(arg, stack);
                 complete_arg = true;
+                string++;
                 break;
 
             default:
@@ -250,7 +279,6 @@ char **extract_args(char *string, char *command, int *linenum, EnvStack *stack) 
                 break;
         }
         assert(string);
-        string++;
         if (argc >= max_args) die_invalid_syntax("Too many args", *linenum);
         if (complete_arg) argv_buf[argc++] = arg;
     }
@@ -259,7 +287,7 @@ char **extract_args(char *string, char *command, int *linenum, EnvStack *stack) 
     return argv_buf;
 }
 
-char *extract_string(char *string, int *linenum, EnvStack *stack) {
+char *extract_string(char *string, EnvStack *stack) {
     StrBuilder *build = str_build_create();
     assert(string);
     assert(string[0] != '"' && string[strlen(string) - 1] != '"');

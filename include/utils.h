@@ -53,4 +53,9 @@ char *must_strdup(char *string);
  */
 char **copy_argv(char *argv[], int argc);
 
+/*
+ * Prints argv for debugging purposes.
+ */
+void print_argv(char *argv[]);
+
 #endif // UTILS_H

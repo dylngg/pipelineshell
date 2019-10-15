@@ -34,8 +34,9 @@ Result *create_empty_result();
 void destroy_result(Result *result);
 
 /*
- * Runs a command and returns the exit code.
+ * Runs a pipeline of commands found by popping the stack the given number of
+ * times.
  */
-int run(char* command, EnvStack* stack);
+Result *pipeline_cmds(EnvStack *stack, int ncmds);
 
 #endif  // EXEC_H

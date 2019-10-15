@@ -116,6 +116,13 @@ char peek_char(FILE *stream) {
     return ungetc(c, stream);
 }
 
+char get_char(FILE *stream, int *linenum) {
+    char c = getc(stream);
+    if (c == '\n') *linenum = *linenum + 1;
+    return c;
+}
+
+// FIXME: Why not just use a string instead of varags?
 char seek_until_chars(FILE *stream, char *result[], int nchars, ...) {
     assert(result);
     StrBuilder* build = str_build_create();

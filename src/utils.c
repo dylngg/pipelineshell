@@ -1,6 +1,7 @@
 #include <assert.h>
 #include <stdbool.h>
 #include <string.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include "utils.h"
 #include "errors.h"
@@ -72,4 +73,9 @@ char **copy_argv(char *argv[], int argc) {
     for (int i = 0; i < argc; i++) new_argv[i] = must_strdup(argv[i]);
     new_argv[argc] = NULL;
     return new_argv;
+}
+
+void print_argv(char *argv[]) {
+    for (int i = 0; argv[i] != NULL; i++) printf("\"%s\" ", argv[i]);
+    printf("\n");
 }
