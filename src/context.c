@@ -14,7 +14,7 @@
 
 #define RESULT_BUF_SIZE 32
 
-void push_stack(EnvStack *stack, char* argv[]) {
+void push_stack(EnvStack *stack, char *argv[]) {
     if (!stack) {
         stack = must_malloc(sizeof *stack);
         stack->env_stack = NULL;
@@ -44,7 +44,7 @@ void pop_stack(EnvStack *stack) {
     assert(stack);
     assert(stack->nstacks > 0);
 
-    Env* toremove = stack->env_stack[stack->nstacks - 1];
+    Env *toremove = stack->env_stack[stack->nstacks - 1];
     char **argv = toremove->argv;
     for (int i = 0; argv[i] != NULL; i++) free(argv[i]);
     free(argv);
@@ -76,7 +76,7 @@ char *get_stack_var(EnvStack *stack, char *name) {
     return NULL;
 }
 
-void add_stack_var(EnvStack *stack, char* name, char* value) {
+void add_stack_var(EnvStack *stack, char *name, char *value) {
     assert(stack);
     assert(stack->nstacks > 0);
     int top_index = stack->nstacks - 1;
@@ -103,11 +103,11 @@ void add_stack_var(EnvStack *stack, char* name, char* value) {
     return;
 }
 
-exit_t get_last_exit_code(EnvStack* stack) {
+exit_t get_last_exit_code(EnvStack *stack) {
     return stack->last_code;
 }
 
-void set_last_exit_code(EnvStack* stack, exit_t code) {
+void set_last_exit_code(EnvStack *stack, exit_t code) {
     stack->last_code = code;
 }
 
@@ -118,7 +118,7 @@ char peek_char(FILE *stream) {
 
 char seek_until_chars(FILE *stream, char *result[], char *stop) {
     assert(result);
-    StrBuilder* build = str_build_create();
+    StrBuilder *build = str_build_create();
 
     char c;
     while((c = peek_char(stream)) != EOF) {

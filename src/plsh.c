@@ -165,7 +165,7 @@ Result *parse_assignment(FILE *stream, char *name, int *linenum, EnvStack *stack
 
 Result *parse_command(FILE *stream, char *name, int *linenum, EnvStack *stack) {
     int ncmds = prepare_commands(stream, name, linenum, stack);
-    Result* result = pipeline_cmds(stack, ncmds);
+    Result *result = pipeline_cmds(stack, ncmds);
     set_last_exit_code(stack, result->code);
     return result;
 }

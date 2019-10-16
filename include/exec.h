@@ -28,6 +28,11 @@ Result *create_result(char *output);
 Result *create_empty_result();
 
 /*
+ * Updates the given result with the given output.
+ */
+void update_result_output(Result *result, char *output);
+
+/*
  * Destroys the result by deallocating the output and closing the out file
  * descriptor.
  */
@@ -38,5 +43,10 @@ void destroy_result(Result *result);
  * times.
  */
 Result *pipeline_cmds(EnvStack *stack, int ncmds);
+
+/*
+ * Reads the given file into a string.
+ */
+char *read_to_str(int fd);
 
 #endif  // EXEC_H

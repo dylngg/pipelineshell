@@ -54,8 +54,8 @@ Result *pipeline_cmds(EnvStack *stack, int ncmds) {
     sigprocmask(SIG_BLOCK, &blocked, NULL);
 
     for (int i = 0; i < ncmds; i++) {
-        Env* env = get_env(stack);
-        char** argv = env->argv;
+        Env *env = get_env(stack);
+        char **argv = env->argv;
         assert(argv[0] != NULL);
         // print_argv(argv);
         // TODO: Handle lambdas here (output = ...)

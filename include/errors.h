@@ -29,7 +29,7 @@ void die_invalid_syntax(char *msg, int linenum);
 /*
  * Exits the program with a appropriate errno message.
  */
-void die_errno(char* msg);
+void die_errno(char *msg);
 
 /*
  * Exits the program with a message about no memory.

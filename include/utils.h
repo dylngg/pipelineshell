@@ -31,7 +31,7 @@ void str_build_add_substr(StrBuilder *build, char *str, int start, int end);
 /*
  * Returns a string from the StrBuilder.
  */
-char *str_build_to_str(StrBuilder* build);
+char *str_build_to_str(StrBuilder *build);
 
 /*
  * Mallocs and dies if ENOMEM.
@@ -41,7 +41,7 @@ void *must_malloc(size_t size);
 /*
  * Reallocs and dies if ENOMEM.
  */
-void *must_realloc(void* ptr, size_t size);
+void *must_realloc(void *ptr, size_t size);
 
 /*
  * Strdups and dies if ENOMEM.

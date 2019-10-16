@@ -8,7 +8,7 @@
 
 #define STR_BUF_SIZE 64
 
-static void extend_bounds(StrBuilder* build, size_t by) {
+static void extend_bounds(StrBuilder *build, size_t by) {
     size_t needed_size = build->size + by + 1;  // Plus null terminator
     if (needed_size > build->bufsize) {
         build->bufsize = needed_size * 2;
@@ -43,7 +43,7 @@ void str_build_add_substr(StrBuilder *build, char *str, int start, int end) {
     for (int i = start; i < end; i++) build->buf[build->size++] = str[i];
 }
 
-char *str_build_to_str(StrBuilder* build) {
+char *str_build_to_str(StrBuilder *build) {
     build->buf = must_realloc(build->buf, build->size + 1);  // Plus null terminator
     build->buf[build->size] = '\0';
     return build->buf;
@@ -55,7 +55,7 @@ void *must_malloc(size_t size) {
     return ptr;
 }
 
-void *must_realloc(void* ptr, size_t size) {
+void *must_realloc(void *ptr, size_t size) {
     // FIXME: Non-GNU will not free new alloc
     ptr = realloc(ptr, size);
     if (!ptr) die_no_mem();
