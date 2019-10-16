@@ -1,4 +1,4 @@
-#!/Users/dylngg/Documents/programming/pipelineshell/plsh
+#!/usr/bin/env plsh
 # Sums the numbers in stdin (seperated by newline)
 total=0
 {

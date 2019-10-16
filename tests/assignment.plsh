@@ -1,4 +1,4 @@
-#!/Users/dylngg/Documents/programming/pipelineshell/plsh
+#!/usr/bin/env plsh
 a=1
 b= 2
 c =3

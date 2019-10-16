@@ -1,3 +1,3 @@
-#!/Users/dylngg/Documents/programming/pipelineshell/plsh
+#!/usr/bin/env plsh
 forty = (echo "20 + 20" | bc)
 echo $forty

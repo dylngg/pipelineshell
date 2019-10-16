@@ -1,4 +1,4 @@
-#!/Users/dylngg/Documents/programming/pipelineshell/plsh
+#!/usr/bin/env plsh
 # Prints useful information about a process by name
 
 # Get the all the processes by that name

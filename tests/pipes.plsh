@@ -1,3 +1,3 @@
-#!/Users/dylngg/Documents/programming/pipelineshell/plsh
+#!/usr/bin/env plsh
 echo "20 + 20" | bc
 echo "10 + 20" | sed -e "s/1/2/g" | bc
