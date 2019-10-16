@@ -12,8 +12,8 @@
 #include "exec.h"
 #include "utils.h"
 
-Result *parse_scope(FILE *stream, char *argv[], int *linenum, EnvStack *stack, int nchars, ...);
-Result *parse_start(FILE *stream, int *linenum, EnvStack *stack, int nchars, ...);
+Result *parse_scope(FILE *stream, char *argv[], int *linenum, EnvStack *stack, char *bounds);
+Result *parse_start(FILE *stream, int *linenum, EnvStack *stack, char *bounds);
 Result *parse_action(FILE *stream, int *linenum, EnvStack *stack);
 Result *parse_assignment(FILE *stream, char *name, int *linenum, EnvStack *stack);
 Result *parse_command(FILE *stream, char *name, int *linenum, EnvStack *stack);
@@ -39,7 +39,7 @@ int main(int argc, char *argv[]) {
     int linenum = 1;
     // When we pop the stack, we free all the resources; argv is not allocated
     char **argv_copy = copy_argv(argv, argc);
-    Result *result = parse_scope(stream, argv_copy, &linenum, &stack, 0);
+    Result *result = parse_scope(stream, argv_copy, &linenum, &stack, NULL);
     exit_t code = result->code;
     destroy_result(result);
 
@@ -47,23 +47,17 @@ int main(int argc, char *argv[]) {
     return code;
 }
 
-// FIXME: Why not just use a string instead of varags?
-Result *parse_scope(FILE *stream, char *argv[], int *linenum, EnvStack *stack, int nchars, ...) {
+Result *parse_scope(FILE *stream, char *argv[], int *linenum, EnvStack *stack, char *bounds) {
+    if (!bounds) bounds = "";
     if (argv) push_stack(stack, argv);
     else push_stack_from_prev(stack);
-
-    va_list ap;
-    va_start(ap, nchars);
-    char stop_chars[nchars];
-    for (int i = 0; i < nchars; i++) stop_chars[i] = va_arg(ap, int);
-    va_end(ap);
 
     Result *result = NULL;
     char c;
     while((c = peek_char(stream)) != EOF) {
         if (result) free(result);  // Free previous result
-        for (int j = 0; j < nchars; j++) if (c == stop_chars[j]) goto finish;
-        result = parse_start(stream, linenum, stack, 0);
+        for (int i = 0; bounds[i] != '\0'; i++) if (c == bounds[i]) goto finish;
+        result = parse_start(stream, linenum, stack, NULL);
     }
 
 finish:
@@ -71,22 +65,16 @@ finish:
     return result ? result : create_empty_result();
 }
 
-// FIXME: Why not just use a string instead of varags?
-Result *parse_start(FILE *stream, int *linenum, EnvStack *stack, int nchars, ...) {
+Result *parse_start(FILE *stream, int *linenum, EnvStack *stack, char *bounds) {
+    if (!bounds) bounds = "";
     Result *result = NULL;
     char *tmp = "";
     char *tmp2 = "";
     char c;
 
-    va_list ap;
-    va_start(ap, nchars);
-    char stop_chars[nchars];
-    for (int i = 0; i < nchars; i++) stop_chars[i] = va_arg(ap, int);
-    va_end(ap);
-
 top:
     c = peek_char(stream);
-    for (int j = 0; j < nchars; j++) if (c == stop_chars[j]) goto finish;
+    for (int i = 0; bounds[i] != '\0'; i++) if (c == bounds[i]) goto finish;
     switch(c) {
         case ' ':
         case '\t':
@@ -105,7 +93,7 @@ top:
 
         case '"':
             getc(stream);  // Ignore leading '"'
-            if((c = seek_until_chars(stream, &tmp, 2, '\n', '\"')) == '\n' || c == EOF)
+            if((c = seek_until_chars(stream, &tmp, "\n\"")) == '\n' || c == EOF)
                 die_invalid_syntax("Expected fully quoted '\"'", *linenum);
 
             getc(stream);  // Consume ending '"'
@@ -117,7 +105,7 @@ top:
 
         case '$':
             getc(stream);  // Ignore leading '$'
-            c = seek_until_chars(stream, &tmp, 4, '\n', ' ', '\t', ';');
+            c = seek_until_chars(stream, &tmp, "\n \t;");
             if (strlen(tmp) < 1)
                 die_invalid_syntax("Expected variable after '$'", *linenum);
 
@@ -144,7 +132,7 @@ top:
             break;
 
         default:
-            seek_until_chars(stream, &tmp, 4, ' ', '\t', '\n', ';');
+            seek_until_chars(stream, &tmp, "\n \t;");
             result = create_result(tmp);
             free(tmp);
             break;
@@ -156,7 +144,7 @@ finish:
 Result *parse_action(FILE *stream, int *linenum, EnvStack *stack) {
     char *name = NULL;
 
-    char c = seek_until_chars(stream, &name, 6, ' ', '\t', '=', ';', '\n', '|');
+    char c = seek_until_chars(stream, &name, "\n \t;=|");
     if (c == ' ' || c == '\t') c = seek_for_spaces(stream);
 
     if (c == '=')
@@ -169,7 +157,7 @@ Result *parse_action(FILE *stream, int *linenum, EnvStack *stack) {
 
 Result *parse_assignment(FILE *stream, char *name, int *linenum, EnvStack *stack) {
     getc(stream);  // Consume '='
-    Result *result = parse_start(stream, linenum, stack, 2, '\n', ';');
+    Result *result = parse_start(stream, linenum, stack, "\n;");
     add_stack_var(stack, name, result->output);
     free(name);
     return result;
@@ -189,7 +177,7 @@ int prepare_commands(FILE *stream, char *first_cmd, int *linenum, EnvStack *stac
     char *next_cmd = NULL;
     int ncmds = 1;
 
-    char c = seek_until_chars(stream, &args_string, 4, '\n', ';', '#', '|');
+    char c = seek_until_chars(stream, &args_string, "\n;#|");
     char **argv = extract_args(args_string, first_cmd, linenum, stack);
     free(args_string);
     free(first_cmd);
@@ -198,7 +186,7 @@ int prepare_commands(FILE *stream, char *first_cmd, int *linenum, EnvStack *stac
         getc(stream);  // Consume pipe
         seek_for_spaces(stream);  // Consume extra space between pipe and cmd
 
-        c = seek_until_chars(stream, &next_cmd, 4, ' ', '\t', ';', '\n');
+        c = seek_until_chars(stream, &next_cmd, "\n \t;");
         if (c == ' ' || c == '\t')
             seek_for_spaces(stream);
         else if (strlen(next_cmd) < 1)

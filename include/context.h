@@ -68,7 +68,7 @@ char peek_char(FILE *stream);
  * the found character and puts the seeked string (without the given char)
  * into the allocated result buffer.
  */
-char seek_until_chars(FILE *stream, char *result[], int nchars, ...);
+char seek_until_chars(FILE *stream, char *result[], char *stop);
 
 /*
  * Seeks the stream up to a non-space character (not ' ' or '\t') (consumes
