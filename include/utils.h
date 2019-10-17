@@ -14,6 +14,11 @@ typedef struct StrBuilder {
 StrBuilder *str_build_create();
 
 /*
+ * Destroys a StrBuilder struct.
+ */
+void destroy_str_build(StrBuilder *build);
+
+/*
  * Adds a character to the StrBuilder.
  */
 void str_build_add_c(StrBuilder *build, char c);

@@ -320,7 +320,9 @@ char *extract_string(char *string, EnvStack *stack) {
         assert(string);
         string++;
     }
-    return str_build_to_str(build);
+    char *string = str_build_to_str(build);
+    destroy_str_build(build);
+    return string;
 }
 
 char *extract_var(char *var, EnvStack *stack) {

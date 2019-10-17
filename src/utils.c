@@ -8,44 +8,46 @@
 
 #define STR_BUF_SIZE 64
 
-static void extend_bounds(StrBuilder *build, size_t by) {
+static void ensure_str_build_bounds(StrBuilder *build, size_t by) {
     size_t needed_size = build->size + by + 1;  // Plus null terminator
     if (needed_size > build->bufsize) {
         build->bufsize = needed_size * 2;
-        // FIXME: Non-GNU will not free new alloc
         build->buf = must_realloc(build->buf, build->bufsize);
     }
 }
 
 StrBuilder *str_build_create() {
     StrBuilder *build = must_malloc(sizeof *build);
-    build->buf = must_malloc(sizeof *build->buf * STR_BUF_SIZE);
+    build->buf = must_malloc(STR_BUF_SIZE);
     build->bufsize = STR_BUF_SIZE;
     build->size = 0;
     return build;
 }
 
+void destroy_str_build(StrBuilder *build) {
+    assert(build);
+    free(build->buf);
+    free(build);
+}
+
 void str_build_add_c(StrBuilder *build, char c) {
     assert(build);
-    extend_bounds(build, 1);
+    ensure_str_build_bounds(build, 1);
     build->buf[build->size++] = c;
+    build->buf[build->size] = '\0';
 }
 
 void str_build_add_str(StrBuilder *build, char *str) {
-    str_build_add_substr(build, str, 0, strlen(str));
-}
-
-void str_build_add_substr(StrBuilder *build, char *str, int start, int end) {
     assert(build);
-    assert(end >= start);
-    size_t len = end - start;
-    extend_bounds(build, len);
-    for (int i = start; i < end; i++) build->buf[build->size++] = str[i];
+    assert(str);
+    int len = strlen(str);
+    ensure_str_build_bounds(build, len);
+    // '<=': Include null terminator
+    for (int i = 0; i <= len; i++) build->buf[build->size++] = str[i];
 }
 
 char *str_build_to_str(StrBuilder *build) {
     build->buf = must_realloc(build->buf, build->size + 1);  // Plus null terminator
-    build->buf[build->size] = '\0';
     return build->buf;
 }
 

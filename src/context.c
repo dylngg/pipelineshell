@@ -129,7 +129,7 @@ char seek_until_chars(FILE *stream, char *result[], char *stop) {
 
 finish:
     *result = str_build_to_str(build);
-    free(build);
+    destroy_str_build(build);
     return c;  // Restore the stop char
 }
 
